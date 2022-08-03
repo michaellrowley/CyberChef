@@ -214,7 +214,8 @@ self.bakeInput = function(inputNum, bakeId) {
     }
 
     let inputData = inputObj.data;
-    if (typeof inputData !== "string") inputData = inputData.fileBuffer;
+    if (Object.prototype.hasOwnProperty.call(inputData, "fileBuffer"))
+        inputData = inputData.fileBuffer;
 
     self.postMessage({
         action: "queueInput",
@@ -244,7 +245,7 @@ self.getInputObj = function(inputNum) {
  */
 self.getInputValue = function(inputNum) {
     if (self.inputs[inputNum]) {
-        if (typeof self.inputs[inputNum].data === "string") {
+        if (self.inputs[inputNum].type === "userinput") {
             return self.inputs[inputNum].data;
         } else {
             return self.inputs[inputNum].data.fileBuffer;
@@ -422,9 +423,10 @@ self.updateTabHeader = function(inputNum) {
     const input = self.getInputObj(inputNum);
     if (input === null || input === undefined) return;
     let inputData = input.data;
-    if (typeof inputData !== "string") {
+    if (inputData.type === "file") {
         inputData = input.data.name;
     }
+    // TODO - convert to string
     inputData = inputData.replace(/[\n\r]/g, "");
 
     self.postMessage({
@@ -455,7 +457,7 @@ self.setInput = function(inputData) {
         inputNum: inputNum,
         input: inputVal
     };
-    if (typeof inputVal !== "string") {
+    if (input.type === "file") {
         inputObj.name = inputVal.name;
         inputObj.size = inputVal.size;
         inputObj.type = inputVal.type;
@@ -553,23 +555,28 @@ self.updateInputValue = function(inputData) {
     const inputNum = inputData.inputNum;
     if (inputNum < 1) return;
     if (Object.prototype.hasOwnProperty.call(self.inputs[inputNum].data, "fileBuffer") &&
-    typeof inputData.value === "string" && !inputData.force) return;
+        !inputData.fileBuffer &&
+        !inputData.force)
+        return;
     const value = inputData.value;
+    console.log(inputData);
     if (self.inputs[inputNum] !== undefined) {
-        if (typeof value === "string") {
-            self.inputs[inputNum].data = value;
+        if (inputData.fileBuffer) {
+            self.inputs[inputNum].data.fileBuffer = inputData.fileBuffer;
+            self.inputs[inputNum].type = "file";
         } else {
-            self.inputs[inputNum].data.fileBuffer = value;
+            self.inputs[inputNum].data = value;
+            self.inputs[inputNum].type = "userinput";
         }
         self.inputs[inputNum].status = "loaded";
         self.inputs[inputNum].progress = 100;
         return;
     }
 
-    // If we get to here, an input for inputNum could not be found,
-    // so create a new one. Only do this if the value is a string, as
+    // If we get to here, an input for inputNum could not be found, so
+    // create a new one. Only do this if the value is not a file, as
     // loadFiles will create the input object for files
-    if (typeof value === "string") {
+    if (!inputData.fileBuffer) {
         self.inputs.push({
             inputNum: inputNum,
             data: value,
@@ -667,7 +674,7 @@ self.handleLoaderMessage = function(r) {
 
         self.updateInputValue({
             inputNum: inputNum,
-            value: r.fileBuffer
+            fileBuffer: r.fileBuffer
         });
 
         self.postMessage({
@@ -976,8 +983,8 @@ self.filterTabs = function(searchData) {
             self.inputs[iNum].status === "loading" && showLoading ||
             self.inputs[iNum].status === "loaded" && showLoaded) {
             try {
-                if (typeof self.inputs[iNum].data === "string") {
-                    if (filterType.toLowerCase() === "content" &&
+                if (self.inputs[iNum].type === "userinput") {
+                    if (filterType.toLowerCase() === "content" && // TODO convert to string
                         filterExp.test(self.inputs[iNum].data.slice(0, 4096))) {
                         textDisplay = self.inputs[iNum].data.slice(0, 4096);
                         addInput = true;

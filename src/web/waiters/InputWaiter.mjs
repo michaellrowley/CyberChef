@@ -10,6 +10,7 @@ import InputWorker from "worker-loader?inline=no-fallback!../workers/InputWorker
 import Utils, {debounce} from "../../core/Utils.mjs";
 import {toBase64} from "../../core/lib/Base64.mjs";
 import {isImage} from "../../core/lib/FileType.mjs";
+import cptable from "codepage";
 
 import {
     EditorView, keymap, highlightSpecialChars, drawSelection, rectangularSelection, crosshairCursor, dropCursor
@@ -626,24 +627,33 @@ class InputWaiter {
      * @param {boolean} [force=false] - If true, forces the value to be updated even if the type is different to the currently stored type
      */
     updateInputValue(inputNum, value, force=false) {
-        let includeInput = false;
-        const recipeStr = toBase64(value, "A-Za-z0-9+/"); // B64 alphabet with no padding
-        if (recipeStr.length > 0 && recipeStr.length <= 68267) {
-            includeInput = true;
+        console.log("Updating input value", value);
+        let buffer;
+
+
+        // If value is a string, interpret it using the specified character encoding
+        if (typeof value === "string") {
+            buffer = cptable.utils.encode(1200, value);
+            console.log(buffer);
+            buffer = new Uint8Array(buffer).buffer;
+        } else {
+            buffer = value;
         }
+        console.log(buffer);
+
+
+        const recipeStr = value.length < 51200 ? toBase64(value, "A-Za-z0-9+/") : ""; // B64 alphabet with no padding
         this.setUrl({
-            includeInput: includeInput,
+            includeInput: recipeStr.length > 0 && value.length < 51200,
             input: recipeStr
         });
 
-        // Value is either a string set by the input or an ArrayBuffer from a LoaderWorker,
-        // so is safe to use typeof === "string"
-        const transferable = (typeof value !== "string") ? [value] : undefined;
+        const transferable = [buffer];
         this.inputWorker.postMessage({
             action: "updateInputValue",
             data: {
                 inputNum: inputNum,
-                value: value,
+                value: buffer,
                 force: force
             }
         }, transferable);
