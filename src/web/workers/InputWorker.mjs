@@ -129,6 +129,12 @@ self.addEventListener("message", function(e) {
         case "getInputNums":
             self.getInputNums(r.data);
             break;
+        case "setInputName":
+            self.setInputName(r.data);
+            break;
+        case "getInputName":
+            self.getInputName(r.data);
+            break;
         default:
             log.error(`Unknown action '${r.action}'.`);
     }
@@ -412,6 +418,7 @@ self.updateTabHeader = function(inputNum) {
         action: "updateTabHeader",
         data: {
             inputNum: inputNum,
+            inputName: input.customName,
             input: header
         }
     });
@@ -753,6 +760,7 @@ self.addInput = function(
         type: null,
         buffer: new ArrayBuffer(),
         stringSample: "",
+        customName: "",
         file: null,
         status: "pending",
         progress: 0,
@@ -959,5 +967,34 @@ self.filterTabs = function(searchData) {
     self.postMessage({
         action: "displayTabSearchResults",
         data: inputs
+    });
+};
+
+/**
+ * Set the custom name of an input
+ *
+ * @param {object} data - Object containing the custom header and input number of the tab
+ */
+self.setInputName = function(data) {
+    const { newHeader, inputNum } = data;
+    self.inputs[inputNum].customName = newHeader;
+};
+
+/**
+ * Get the input name of an input
+ *
+ * @param {object} data - Object containing tab and callback information for the worker to post back to
+ */
+self.getInputName = function(data) {
+    const {tabNum, id} = data;
+
+    const inputName = self.inputs[tabNum].customName;
+
+    self.postMessage({
+        action: "getInputName",
+        data: {
+            inputName: inputName,
+            id: id
+        }
     });
 };

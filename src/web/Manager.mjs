@@ -181,6 +181,8 @@ class Manager {
         document.getElementById("btn-go-to-input-tab").addEventListener("click", this.input.goToTab.bind(this.input));
         document.getElementById("btn-find-input-tab").addEventListener("click", this.input.findTab.bind(this.input));
         this.addDynamicListener("#input-tabs li .input-tab-content", "click", this.input.changeTabClick, this.input);
+        this.addDynamicListener("#input-tabs li .input-tab-content", "dblclick", this.input.renameTabDblclick, this.input);
+        this.addDynamicListener("#input-tabs li .input-tab-content input", "focusout", this.input.finishTabRename, this.input);
         document.getElementById("input-show-pending").addEventListener("change", this.input.filterTabSearch.bind(this.input));
         document.getElementById("input-show-loading").addEventListener("change", this.input.filterTabSearch.bind(this.input));
         document.getElementById("input-show-loaded").addEventListener("change", this.input.filterTabSearch.bind(this.input));

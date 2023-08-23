@@ -53,10 +53,13 @@ class TabWaiter {
      *
      * @param {number} inputNum - The inputNum of the tab we're trying to get
      * @param {string} io - Either "input" or "output"
-     * @returns {Element}
+     * @returns {Element} - The HTML <li> element of the tab
      */
     getTabItem(inputNum, io) {
-        const tabs = document.getElementById(`${io}-tabs`).children;
+        const ioTabDiv = document.getElementById(`${io}-tabs`);
+        if (ioTabDiv === null) return null;
+
+        const tabs = ioTabDiv.children;
         for (let i = 0; i < tabs.length; i++) {
             if (parseInt(tabs.item(i).getAttribute("inputNum"), 10) === inputNum) {
                 return tabs.item(i);
@@ -210,19 +213,25 @@ class TabWaiter {
      * Updates the tab header to display a preview of the tab contents
      *
      * @param {number} inputNum - The inputNum of the tab to update the header of
+     * @param {string} inputName - The custom name of the tab being updated
      * @param {string} data - The data to display in the tab header
      * @param {string} io - Either "input" or "output"
      */
-    updateTabHeader(inputNum, data, io) {
+    updateTabHeader(inputNum, inputName, data, io) {
         const tab = this.getTabItem(inputNum, io);
         if (tab === null) return;
 
-        let headerData = `Tab ${inputNum}`;
-        if (data.length > 0) {
-            headerData = data.slice(0, 100);
-            headerData = `${inputNum}: ${headerData}`;
+        let prefix = inputName || "";
+        if (prefix.length === 0) {
+            prefix = data.length > 0 ? inputNum.toString() : `Tab ${inputNum}`;
+        } else {
+            prefix = `'${prefix}'`;
         }
-        tab.firstElementChild.innerText = headerData;
+
+        if (data.length > 0) {
+            prefix += ": " + data.slice(0, 100);
+        }
+        tab.firstElementChild.innerText = prefix;
     }
 
     /**

@@ -1220,6 +1220,16 @@ class OutputWaiter {
     }
 
     /**
+     * Update the output waiter's internal log of custom tab names
+     *
+     * @param {number} inputNum - The input number of the tab with a custom name
+     * @param {string} customName - The custom name of the input/tab
+     */
+    updateTabName(inputNum, customName) {
+        this.outputs[inputNum].customName = customName;
+    }
+
+    /**
      * Display output information in the tab header
      *
      * @param {number} inputNum
@@ -1235,7 +1245,10 @@ class OutputWaiter {
             tabStr = await this.getDishTitle(this.getOutputDish(inputNum), 100);
             tabStr = tabStr.replace(/[\n\r]/g, "");
         }
-        this.manager.tabs.updateTabHeader(inputNum, tabStr, "output");
+
+        const tabName = this.outputs[inputNum].customName || "";
+        this.manager.tabs.updateTabHeader(inputNum, tabName, tabStr, "output");
+
         if (this.manager.worker.recipeConfig !== undefined) {
             this.manager.tabs.updateTabProgress(inputNum, this.outputs[inputNum]?.progress, this.manager.worker.recipeConfig.length, "output");
         }

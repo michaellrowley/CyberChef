@@ -478,7 +478,7 @@ class InputWaiter {
                 this.changeTab(r.data, this.app.options.syncTabs);
                 break;
             case "updateTabHeader":
-                this.manager.tabs.updateTabHeader(r.data.inputNum, r.data.input, "input");
+                this.manager.tabs.updateTabHeader(r.data.inputNum, r.data.inputName, r.data.input, "input");
                 break;
             case "loadingInfo":
                 this.showLoadingInfo(r.data, true);
@@ -507,6 +507,7 @@ class InputWaiter {
             case "setUrl":
                 this.app.updateURL(r.data.includeInput, r.data.input);
                 break;
+            case "getInputName":
             case "getInput":
             case "getInputNums":
                 this.callbacks[r.data.id](r.data);
@@ -761,11 +762,11 @@ class InputWaiter {
      * @returns {ArrayBuffer | string}
      */
     async getInputValue(inputNum) {
-        return await new Promise(resolve => {
+        return Utils.arrayBufferToStr(await new Promise(resolve => {
             this.getInputFromWorker(inputNum, false, r => {
                 resolve(r.data);
             });
-        });
+        }));
     }
 
     /**
@@ -1143,6 +1144,9 @@ class InputWaiter {
      * @param {boolean} [changeOutput=false] - If true, also changes the output
      */
     changeTab(inputNum, changeOutput=false) {
+        const activeInput = this.manager.tabs.getActiveTab("input");
+        if (activeInput === inputNum) return;
+
         if (this.manager.tabs.getTabItem(inputNum, "input") !== null) {
             this.manager.tabs.changeTab(inputNum, "input");
             this.inputWorker.postMessage({
@@ -1187,6 +1191,92 @@ class InputWaiter {
         if (tabNum >= 0) {
             this.changeTab(parseInt(tabNum, 10), this.app.options.syncTabs);
         }
+    }
+
+    /**
+     * Retrieves the custom-set input name of a tab
+     *
+     * @param {number} inputNum - The input number of the tab being queried
+    */
+    async getInputName(inputNum) {
+        return await new Promise(resolve => {
+            this.postInputNameRequest(inputNum, r => {
+                resolve(r.inputName);
+            });
+        });
+    }
+
+    /**
+     * Posts a getInputName request to the input worker
+     *
+     * @param {number} tabNum - The input number of the tab being queried
+     * @param {Function} callback - The callback to be called by the input worker with the input's custom name
+     */
+    postInputNameRequest(tabNum, callback) {
+        const id = this.callbackID++;
+        this.callbacks[id] = callback;
+
+        this.inputWorker.postMessage({
+            action: "getInputName",
+            data: {
+                tabNum: tabNum,
+                id: id
+            }
+        });
+    }
+
+    /**
+     * Handler for renaming a tab when a user has double clicked it
+     *
+     * @param {MouseEvent} mouseEvent - The event responsible for triggering this handler
+     */
+    async renameTabDblclick(mouseEvent) {
+        if (!mouseEvent.target || mouseEvent.target.childElementCount !== 0) return;
+
+        const currentInput = this.manager.tabs.getActiveTab("input");
+        const customInputName = await this.getInputName(currentInput);
+        const inputName = customInputName.length > 0 ? customInputName : `Tab ${currentInput}`;
+
+        const editableTabName = document.createElement("input");
+        editableTabName.classList.add("form-control");
+        editableTabName.setAttribute("value", inputName);
+        editableTabName.style.height = "1.5em";
+        editableTabName.style.textAlign = "center";
+        mouseEvent.target.innerHTML = "";
+        mouseEvent.target.appendChild(editableTabName);
+
+        // A pause is required before focusing on any newly added input elements.
+        setTimeout(function() {
+            editableTabName.focus();
+        }, 5);
+    }
+
+    /**
+     * Finishes tab renaming and saves the new name
+     *
+     * @param {FocusEvent} focusEvent - The event responsible for triggering this handler
+     */
+    async finishTabRename(focusEvent) {
+        if (!focusEvent.target) return;
+
+        const currentInput = this.manager.tabs.getActiveTab("input");
+
+        let newHeader = focusEvent.target.value;
+        if (newHeader === `Tab ${currentInput}`) {
+            newHeader = "";
+        }
+
+        // Internally updating the tab's name
+        this.inputWorker.postMessage({
+            action: "setInputName",
+            data: {inputNum: currentInput, newHeader: newHeader}
+        });
+        this.manager.output.updateTabName(currentInput, newHeader);
+
+        // Showing the updated header externally
+        const inputData = await this.getInputValue(currentInput);
+        this.manager.tabs.updateTabHeader(currentInput, newHeader, inputData, "input");
+        this.manager.tabs.updateTabHeader(currentInput, newHeader, inputData, "output");
     }
 
     /**
