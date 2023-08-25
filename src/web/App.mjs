@@ -222,21 +222,27 @@ class App {
      * Sets the user's input data.
      *
      * @param {string} input - The string to set the input to
+     * @param {number} [inputNum=-1] - The input number to set (-1 = currently active tab)
+     * @param {boolean} [switchToTab=true] - Whether the input should be switched to
      */
-    setInput(input) {
+    setInput(input, inputNum = -1, switchToTab = false) {
         // Get the currently active tab.
         // If there isn't one, assume there are no inputs so use inputNum of 1
-        let inputNum = this.manager.tabs.getActiveTab("input");
-        if (inputNum === -1) inputNum = 1;
+        const activeInputNum = this.manager.tabs.getActiveTab("input");
+        if (inputNum === -1) {
+            inputNum = activeInputNum === -1 ? 1 : activeInputNum;
+        }
         this.manager.input.updateInputValue(inputNum, input);
 
-        this.manager.input.inputWorker.postMessage({
-            action: "setInput",
-            data: {
-                inputNum: inputNum,
-                silent: true
-            }
-        });
+        if (switchToTab || activeInputNum === inputNum) {
+            this.manager.input.inputWorker.postMessage({
+                action: "setInput",
+                data: {
+                    inputNum: inputNum,
+                    silent: true
+                }
+            });
+        }
     }
 
 
@@ -518,7 +524,8 @@ class App {
             this.manager.output.eolChange(this.uriParams.oeol);
         }
 
-        // Read in input data from URI params
+        // Read in input data from URI params (for backwards compatibility with single-input versions)
+        let inputOffset = 0;
         if (this.uriParams.input) {
             try {
                 let inputVal;
@@ -530,6 +537,46 @@ class App {
                     inputVal = Utils.byteArrayToChars(inputData);
                 }
                 this.setInput(inputVal);
+                inputOffset++;
+            } catch (err) {}
+        }
+
+        // Read in multiple inputs from URI params
+        if (this.uriParams.inputs) {
+            try {
+                const inputCharacterEncoding = this.manager.input.getChrEnc();
+                // allInputs is structured as an array of input objects.
+                const allInputs = JSON.parse(this.uriParams.inputs);
+                if (!Array.isArray(allInputs)) {
+                    throw new Error("Invalid JSON structure for 'inputs' array");
+                }
+                const inputsCount = allInputs.length;
+                for (let inputIndex = 0; inputIndex < inputsCount; inputIndex++) {
+                    const inputObject = allInputs[inputIndex];
+
+                    if (undefined === inputObject.data || typeof(inputObject.data) !== "string") {
+                        throw new Error("Invalid object type in 'inputs' array");
+                    }
+
+                    // Decode the data from base64 to an array:
+                    let inputData = fromBase64(inputObject.data, "A-Za-z0-9+/", "byteArray");
+
+                    // Decode the data - if applicable - from a byteArray to a character-encoded string:
+                    if (inputCharacterEncoding > 0) {
+                        inputData = cptable.utils.decode(inputCharacterEncoding, inputData);
+                    } else {
+                        inputData = Utils.byteArrayToChars(inputData);
+                    }
+
+                    this.setInput(inputData, inputIndex + 1 + inputOffset);
+
+                    if (inputIndex !== inputsCount - 1) {
+                        this.manager.input.inputWorker.postMessage({
+                            action: "addInput",
+                            data: false
+                        });
+                    }
+                }
             } catch (err) {}
         }
 
@@ -788,7 +835,7 @@ class App {
      * @param {string} [input=null]
      * @param {boolean} [changeUrl=true]
      */
-    updateURL(includeInput, input=null, changeUrl=true) {
+    async updateURL(includeInput, input=null, changeUrl=true) {
         // Set title
         const recipeConfig = this.getRecipeConfig();
         let title = "CyberChef";
@@ -808,7 +855,7 @@ class App {
 
         // Update the current history state (not creating a new one)
         if (this.options.updateUrl && changeUrl) {
-            this.lastStateUrl = this.manager.controls.generateStateUrl(true, includeInput, input, recipeConfig);
+            this.lastStateUrl = await this.manager.controls.generateStateUrl(true, includeInput, input, recipeConfig);
             window.history.replaceState({}, title, this.lastStateUrl);
         }
     }

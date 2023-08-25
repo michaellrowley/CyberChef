@@ -5,6 +5,7 @@
  */
 
 import Utils from "../../core/Utils.mjs";
+import { toBase64 } from "../../core/lib/Base64.mjs";
 
 
 /**
@@ -94,13 +95,13 @@ class ControlsWaiter {
      *
      * @param {Object[]} [recipeConfig] - The recipe configuration object array.
      */
-    initialiseSaveLink(recipeConfig) {
+    async initialiseSaveLink(recipeConfig) {
         recipeConfig = recipeConfig || this.app.getRecipeConfig();
 
         const includeRecipe = document.getElementById("save-link-recipe-checkbox").checked;
         const includeInput = document.getElementById("save-link-input-checkbox").checked;
         const saveLinkEl = document.getElementById("save-link");
-        const saveLink = this.generateStateUrl(includeRecipe, includeInput, null, recipeConfig);
+        const saveLink = await this.generateStateUrl(includeRecipe, includeInput, null, recipeConfig);
 
         saveLinkEl.innerHTML = Utils.escapeHtml(Utils.truncate(saveLink, 120));
         saveLinkEl.setAttribute("href", saveLink);
@@ -117,7 +118,7 @@ class ControlsWaiter {
      * @param {string} [baseURL] - The CyberChef URL, set to the current URL if not included
      * @returns {string}
      */
-    generateStateUrl(includeRecipe, includeInput, input, recipeConfig, baseURL) {
+    async generateStateUrl(includeRecipe, includeInput, input, recipeConfig, baseURL) {
         recipeConfig = recipeConfig || this.app.getRecipeConfig();
 
         const link = baseURL || window.location.protocol + "//" +
@@ -127,17 +128,6 @@ class ControlsWaiter {
 
         includeRecipe = includeRecipe && (recipeConfig.length > 0);
 
-        // If we don't get passed an input, get it from the current URI
-        if (input === null && includeInput) {
-            const params = this.app.getURIParams();
-            if (params.input) {
-                includeInput = true;
-                input = params.input;
-            } else {
-                includeInput = false;
-            }
-        }
-
         const inputChrEnc = this.manager.input.getChrEnc();
         const outputChrEnc = this.manager.output.getChrEnc();
         const inputEOLSeq = this.manager.input.getEOLSeq();
@@ -145,17 +135,37 @@ class ControlsWaiter {
 
         const params = [
             includeRecipe ? ["recipe", recipeStr] : undefined,
-            includeInput && input.length ? ["input", Utils.escapeHtml(input)] : undefined,
             inputChrEnc !== 0 ? ["ienc", inputChrEnc] : undefined,
             outputChrEnc !== 0 ? ["oenc", outputChrEnc] : undefined,
             inputEOLSeq !== "\n" ? ["ieol", inputEOLSeq] : undefined,
             outputEOLSeq !== "\n" ? ["oeol", outputEOLSeq] : undefined
         ];
 
+        // Add inputs to the parameters:
+        if (includeInput) {
+            const inputNums = await this.manager.input.getInputNums();
+            const inputs = [];
+            for (const num of inputNums.inputNums) {
+                const inputData = await this.manager.input.getInputValue(num);
+                if (inputData.byteLength === 0 || inputData.length === 0) {
+                    // Skip empty inputs.
+                    continue;
+                }
+                const input = {
+                    data: toBase64(inputData, "A-Za-z0-9+/")
+                };
+                inputs.push(input);
+            }
+
+            const arrayFormatted = JSON.stringify(inputs);
+            params.push(["inputs", arrayFormatted]);
+        }
+
         const hash = params
             .filter(v => v)
             .map(([key, value]) => `${key}=${Utils.encodeURIFragment(value)}`)
             .join("&");
+
 
         if (hash) {
             return `${link}#${hash}`;
@@ -349,11 +359,11 @@ class ControlsWaiter {
      *
      * @param {event} e
      */
-    supportButtonClick(e) {
+    async supportButtonClick(e) {
         e.preventDefault();
 
         const reportBugInfo = document.getElementById("report-bug-info");
-        const saveLink = this.generateStateUrl(true, true, null, null, "https://gchq.github.io/CyberChef/");
+        const saveLink = await this.generateStateUrl(true, true, null, null, "https://gchq.github.io/CyberChef/");
 
         if (reportBugInfo) {
             reportBugInfo.innerHTML = `* Version: ${PKG_VERSION}
